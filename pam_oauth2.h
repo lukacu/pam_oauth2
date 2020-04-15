@@ -19,6 +19,8 @@ struct pam_oauth2_options {
   char *client_password;
   char *username_path;
   char *scope;
+  char *role;
+  char *roles_path;
   bool do_codeauth;
   bool do_tokenauth;
   bool do_passwordauth;
@@ -36,6 +38,7 @@ struct pam_oauth2_userinfo {
   char *desired_username;
   char *original_username;
   char *scope;
+  char **roles;
 };
 
 struct pam_oauth2_token *pam_oauth2_token_new ();

@@ -473,6 +473,7 @@ void pam_oauth2_revoke (struct pam_oauth2_options *options, struct pam_oauth2_to
 struct pam_oauth2_userinfo *pam_oauth2_userinfo (struct pam_oauth2_options *options, char *token) {
   struct pam_oauth2_userinfo *result = NULL;
   json_value *root, *node;
+  int i, j;
   char *response;
   char *token_escape, *data;
 
@@ -507,6 +508,8 @@ struct pam_oauth2_userinfo *pam_oauth2_userinfo (struct pam_oauth2_options *opti
   result = malloc (sizeof (struct pam_oauth2_userinfo));
   memset (result, 0, sizeof (struct pam_oauth2_userinfo));
 
+  result->roles = NULL;
+
   /* Copy scope if there is one */
   if (((node = pam_oauth2_json_get_name (root, "scope")) != NULL) &&
       (node->type == json_string))
@@ -523,7 +526,23 @@ struct pam_oauth2_userinfo *pam_oauth2_userinfo (struct pam_oauth2_options *opti
       (node->type == json_string))
     result->desired_username = strdup (node->u.string.ptr);
 
-  LDEBUG ("Original username %s ", result->original_username);
+  /* Check for desired username */
+  if ((options->roles_path != NULL) &&
+      ((node = pam_oauth2_json_path (root, options->roles_path, strlen (options->roles_path))) != NULL) &&
+      (node->type == json_array)) {
+    LDEBUG ("Roles path %s: \n", options->roles_path);
+    result->roles = malloc ((node->u.array.length + 1) * sizeof(char*));
+    j = 0;
+    for (i = 0; i < node->u.array.length; i++)
+      if (node->u.array.values[i]->type == json_string) {
+        LDEBUG (" %s, ", node->u.array.values[i]->u.string.ptr);
+        result->roles[j++] = strdup (node->u.array.values[i]->u.string.ptr);
+      }
+      result->roles[j++] = NULL;
+      LDEBUG ("\n");
+  }
+
+  LDEBUG ("Original username %s \n", result->original_username);
   LDEBUG ("Desired username %s from %s\n", result->desired_username, options->username_path);
   LDEBUG ("Scopes %s, requred %s\n", result->scope, options->scope);
 
@@ -545,6 +564,17 @@ void pam_oauth2_userinfo_free (struct pam_oauth2_userinfo *info) {
 
   if (info->scope != NULL)
     free (info->scope);
+
+  if (info->roles != NULL) {
+    char **roles = info->roles;
+
+    while (*roles != NULL) {
+      free (*roles);
+      roles++;
+    }
+
+    free(info->roles);
+  }
 
   free (info);
 }
@@ -581,8 +611,12 @@ struct pam_oauth2_options *pam_oauth2_options_parse (int argc, const char **argv
       options->introspection_endpoint = strdup (argv [opt] + 18);
     else if (strncmp (argv [opt], "username-path=", 14) == 0)
       options->username_path = strdup (argv [opt] + 14);
+    else if (strncmp (argv [opt], "roles-path=", 11) == 0)
+      options->roles_path = strdup (argv [opt] + 11);
     else if (strncmp (argv [opt], "scope=", 6) == 0)
       options->scope = strdup (argv [opt] + 6);
+    else if (strncmp (argv [opt], "role=", 5) == 0)
+      options->role = strdup (argv [opt] + 5);
 
   return options;
 }
@@ -611,6 +645,12 @@ void pam_oauth2_options_free (struct pam_oauth2_options *options) {
 
   if (options->scope)
     free (options->scope);
+
+  if (options->role)
+    free (options->role);
+
+  if (options->roles_path)
+    free (options->roles_path);
 
   free (options);
 }
